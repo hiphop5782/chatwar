@@ -84,10 +84,23 @@ button, .status-card a { border: 0; border-radius: 14px; padding: 0 20px; color:
 .mine .message-line { flex-direction: row-reverse; }
 .message-bubble { margin: 0; padding: 11px 14px; border-radius: 6px 17px 17px 17px; background: #fff; box-shadow: 0 3px 12px rgba(37,45,66,.07); line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
 .mine .message-bubble { color: #fff; border-radius: 17px 6px 17px 17px; background: #6b5cff; }
+.inline-emoji { display: inline-block; width: clamp(46px, 10vw, 72px); height: clamp(46px, 10vw, 72px); margin: 2px 3px; object-fit: contain; vertical-align: middle; }
+.message-emoji { width: clamp(96px, 20vw, 150px); }
+.message-emoji img { display: block; width: 100%; height: auto; object-fit: contain; }
 .message-line time { flex: 0 0 auto; color: #9aa1ae; font-size: 10px; }
+.composer-wrap { position: relative; background: #fff; }
 .composer { display: flex; gap: 10px; padding: 16px 20px max(16px, env(safe-area-inset-bottom)); border-top: 1px solid #e8ebf1; background: #fff; }
 .composer input { flex: 1; padding: 13px 16px; background: #f7f8fb; }
-.composer button { min-width: 70px; }
+.composer .send-button { min-width: 70px; }
+.composer .emoji-toggle { flex: 0 0 46px; width: 46px; padding: 0; color: #6b5cff; background: #efedff; font-size: 25px; }
+.composer .emoji-toggle.active { color: #fff; background: #6b5cff; }
+.emoji-picker { position: absolute; right: 16px; bottom: calc(100% - 1px); left: 16px; z-index: 10; overflow: hidden; border: 1px solid #dfe3ec; border-radius: 18px 18px 0 0; background: #fff; box-shadow: 0 -16px 40px rgba(33,42,66,.14); }
+.emoji-picker-title { padding: 12px 16px 10px; border-bottom: 1px solid #eef0f5; color: #596276; font-size: 13px; font-weight: 800; }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; max-height: min(46vh, 390px); padding: 10px; overflow-y: auto; }
+.emoji-option { display: grid; grid-template-rows: 60px auto; place-items: center; min-width: 0; min-height: 86px; padding: 5px; border-radius: 12px; color: #596276; background: #f7f8fb; font-size: 10px; transition: background .15s, transform .15s; }
+.emoji-option:hover { background: #efedff; transform: translateY(-1px); }
+.emoji-option img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.emoji-option span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (min-width: 861px) and (min-height: 700px) {
   .chat-shell { padding: 24px; }
@@ -104,4 +117,6 @@ button, .status-card a { border: 0; border-radius: 14px; padding: 0 20px; color:
   .message-list { padding: 20px 14px; }
   .message-row { max-width: 86%; }
   .composer { padding-left: 12px; padding-right: 12px; }
+  .emoji-picker { right: 8px; left: 8px; }
+  .emoji-grid { grid-template-columns: repeat(4, 1fr); }
 }

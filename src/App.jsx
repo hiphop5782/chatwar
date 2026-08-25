@@ -12,6 +12,16 @@ import {
 import { auth, db } from './firebase'
 
 const NICKNAME_KEY = 'chatwar.nickname'
+const EMOJI_IDS = Array.from({ length: 111 }, (_, index) => index + 1)
+const EMOJI_NAMES = {
+  1: '화남', 2: '무표정', 3: '삐짐', 4: '멋짐', 5: '슬픔', 6: '메롱',
+  7: '궁금', 8: '하하', 9: '화이팅', 10: '부끄러움', 11: '식은땀',
+  12: '수줍음', 13: '윙크', 14: '눈물', 15: '사랑', 16: '웃음',
+  17: '부탁', 18: '피곤', 34: '좋아요', 47: '졸림', 62: '정색',
+  65: '깔깔', 69: '어지러움', 83: '폭소', 91: '미소', 94: '싫어요',
+}
+const emojiToken = (emojiId) => `[${EMOJI_NAMES[emojiId] ?? `이모티콘${emojiId}`}]`
+const EMOJI_BY_TOKEN = Object.fromEntries(EMOJI_IDS.map((emojiId) => [emojiToken(emojiId), emojiId]))
 function getRoomId() {
   return new URLSearchParams(window.location.search).get('room')
 }
@@ -22,6 +32,22 @@ function formatTime(timestamp) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(timestamp))
+}
+
+function renderMessageText(messageText) {
+  return messageText.split(/(\[[^\]\n]{1,20}\])/g).map((part, index) => {
+    const emojiId = EMOJI_BY_TOKEN[part]
+    if (!emojiId) return part
+    return (
+      <img
+        className="inline-emoji"
+        src={`/emojis/${emojiId}.png`}
+        alt={part}
+        title={part}
+        key={`${part}-${index}`}
+      />
+    )
+  })
 }
 
 export default function App() {
@@ -102,7 +128,9 @@ function ChatRoom({ roomId, user }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   const bottomRef = useRef(null)
+  const messageInputRef = useRef(null)
 
   useEffect(() => {
     getDoc(doc(db, 'rooms', roomId))
@@ -135,12 +163,9 @@ function ChatRoom({ roomId, user }) {
     setJoined(true)
   }
 
-  async function sendMessage(event) {
-    event.preventDefault()
-    const nextText = text.trim()
-    if (!nextText || sending) return
+  async function appendMessage({ type, messageText = '', emojiId = null }) {
+    if (sending) return false
     setSending(true)
-    setText('')
     try {
       const roomReference = doc(db, 'rooms', roomId)
       await runTransaction(db, async (transaction) => {
@@ -152,7 +177,9 @@ function ChatRoom({ roomId, user }) {
           id: crypto.randomUUID(),
           uid: user.uid,
           nickname,
-          text: nextText,
+          type,
+          text: messageText,
+          emojiId,
           createdAt: Date.now(),
         }
 
@@ -160,11 +187,37 @@ function ChatRoom({ roomId, user }) {
           messages: [...previousMessages, nextMessage].slice(-100),
         })
       })
+      return true
     } catch {
-      setText(nextText)
+      return false
     } finally {
       setSending(false)
     }
+  }
+
+  async function sendMessage(event) {
+    event.preventDefault()
+    const nextText = text.trim()
+    if (!nextText || sending) return
+    setText('')
+    const sent = await appendMessage({ type: 'text', messageText: nextText })
+    if (!sent) setText(nextText)
+  }
+
+  function insertEmojiToken(emojiId) {
+    const input = messageInputRef.current
+    const token = emojiToken(emojiId)
+    const start = input?.selectionStart ?? text.length
+    const end = input?.selectionEnd ?? start
+    const nextText = `${text.slice(0, start)}${token}${text.slice(end)}`
+    setText(nextText.slice(0, 500))
+    setEmojiPickerOpen(false)
+
+    requestAnimationFrame(() => {
+      const cursor = Math.min(start + token.length, 500)
+      messageInputRef.current?.focus()
+      messageInputRef.current?.setSelectionRange(cursor, cursor)
+    })
   }
 
   async function copyLink() {
@@ -212,7 +265,13 @@ function ChatRoom({ roomId, user }) {
               <article className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>
                 {!mine && <span className="message-name">{message.nickname}</span>}
                 <div className="message-line">
-                  <p className="message-bubble">{message.text}</p>
+                  {message.type === 'emoji' ? (
+                    <div className="message-emoji">
+                      <img src={`/emojis/${message.emojiId}.png`} alt={`게임 이모티콘 ${message.emojiId}`} />
+                    </div>
+                  ) : (
+                    <p className="message-bubble">{renderMessageText(message.text)}</p>
+                  )}
                   <time>{formatTime(message.createdAt)}</time>
                 </div>
               </article>
@@ -220,16 +279,48 @@ function ChatRoom({ roomId, user }) {
           })}
           <div ref={bottomRef} />
         </div>
-        <form className="composer" onSubmit={sendMessage}>
-          <input
-            maxLength="500"
-            placeholder="메시지를 입력하세요"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            aria-label="메시지"
-          />
-          <button disabled={!text.trim() || sending} aria-label="전송">전송</button>
-        </form>
+        <div className="composer-wrap">
+          {emojiPickerOpen && (
+            <div className="emoji-picker" role="dialog" aria-label="게임 이모티콘 선택">
+              <div className="emoji-picker-title">게임 이모티콘</div>
+              <div className="emoji-grid">
+                {EMOJI_IDS.map((emojiId) => (
+                  <button
+                    type="button"
+                    className="emoji-option"
+                    key={emojiId}
+                    onClick={() => insertEmojiToken(emojiId)}
+                    aria-label={`${emojiToken(emojiId)} 입력`}
+                    title={emojiToken(emojiId)}
+                  >
+                    <img src={`/emojis/${emojiId}.png`} alt="" loading="lazy" />
+                    <span>{emojiToken(emojiId)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <form className="composer" onSubmit={sendMessage}>
+            <button
+              type="button"
+              className={`emoji-toggle ${emojiPickerOpen ? 'active' : ''}`}
+              aria-label="게임 이모티콘 열기"
+              aria-expanded={emojiPickerOpen}
+              onClick={() => setEmojiPickerOpen((open) => !open)}
+            >
+              ☺
+            </button>
+            <input
+              ref={messageInputRef}
+              maxLength="500"
+              placeholder="메시지 또는 [하하]"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              aria-label="메시지"
+            />
+            <button className="send-button" disabled={!text.trim() || sending} aria-label="전송">전송</button>
+          </form>
+        </div>
       </section>
     </main>
   )

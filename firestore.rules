@@ -19,14 +19,28 @@ service cloud.firestore {
         && request.resource.data.messages.size() >= 1
         && request.resource.data.messages.size() <= 100
         && request.resource.data.messages[request.resource.data.messages.size() - 1].keys()
-          .hasOnly(['id', 'uid', 'nickname', 'text', 'createdAt'])
+          .hasOnly(['id', 'uid', 'nickname', 'type', 'text', 'emojiId', 'createdAt'])
         && request.resource.data.messages[request.resource.data.messages.size() - 1].uid == request.auth.uid
         && request.resource.data.messages[request.resource.data.messages.size() - 1].nickname is string
         && request.resource.data.messages[request.resource.data.messages.size() - 1].nickname.size() >= 1
         && request.resource.data.messages[request.resource.data.messages.size() - 1].nickname.size() <= 20
-        && request.resource.data.messages[request.resource.data.messages.size() - 1].text is string
-        && request.resource.data.messages[request.resource.data.messages.size() - 1].text.size() >= 1
-        && request.resource.data.messages[request.resource.data.messages.size() - 1].text.size() <= 500;
+        && (
+          (
+            request.resource.data.messages[request.resource.data.messages.size() - 1].type == 'text'
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].text is string
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].text.size() >= 1
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].text.size() <= 500
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].emojiId == null
+          )
+          ||
+          (
+            request.resource.data.messages[request.resource.data.messages.size() - 1].type == 'emoji'
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].text == ''
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].emojiId is int
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].emojiId >= 1
+            && request.resource.data.messages[request.resource.data.messages.size() - 1].emojiId <= 111
+          )
+        );
       allow delete: if false;
     }
   }
