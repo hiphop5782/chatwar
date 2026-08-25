@@ -6,41 +6,92 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId} {
+      function lastMessage() {
+        return request.resource.data.messages[request.resource.data.messages.size() - 1];
+      }
+
+      function validMessageUpdate() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages'])
+          && !(request.auth.uid in resource.data.get('mutedUsers', []))
+          && !(request.auth.uid in resource.data.get('kickedUsers', []))
+          && request.resource.data.messages is list
+          && request.resource.data.messages.size() >= 1
+          && request.resource.data.messages.size() <= 100
+          && lastMessage().keys().hasOnly(['id', 'uid', 'nickname', 'type', 'text', 'emojiId', 'createdAt'])
+          && lastMessage().uid == request.auth.uid
+          && lastMessage().nickname is string
+          && lastMessage().nickname.size() >= 1
+          && lastMessage().nickname.size() <= 20
+          && (
+            (
+              lastMessage().type == 'text'
+              && lastMessage().text is string
+              && lastMessage().text.size() >= 1
+              && lastMessage().text.size() <= 500
+              && lastMessage().emojiId == null
+            )
+            ||
+            (
+              lastMessage().type == 'emoji'
+              && lastMessage().text == ''
+              && lastMessage().emojiId is int
+              && lastMessage().emojiId >= 1
+              && lastMessage().emojiId <= 111
+            )
+            ||
+            (
+              lastMessage().type == 'system'
+              && resource.data.createdBy == request.auth.uid
+              && lastMessage().text is string
+              && lastMessage().text.size() >= 1
+              && lastMessage().text.size() <= 500
+              && lastMessage().emojiId == null
+            )
+          );
+      }
+
+      function validPresenceUpdate() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants'])
+          && !(request.auth.uid in resource.data.get('kickedUsers', []))
+          && request.resource.data.participants is map
+          && request.resource.data.participants.diff(resource.data.get('participants', {}))
+            .affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.participants[request.auth.uid].keys()
+            .hasOnly(['uid', 'nickname', 'lastSeen'])
+          && request.resource.data.participants[request.auth.uid].uid == request.auth.uid
+          && request.resource.data.participants[request.auth.uid].nickname is string
+          && request.resource.data.participants[request.auth.uid].nickname.size() >= 1
+          && request.resource.data.participants[request.auth.uid].nickname.size() <= 20
+          && request.resource.data.participants[request.auth.uid].lastSeen is int;
+      }
+
+      function validHostUpdate() {
+        return resource.data.createdBy == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['participants', 'mutedUsers', 'kickedUsers'])
+          && request.resource.data.participants is map
+          && request.resource.data.mutedUsers is list
+          && request.resource.data.kickedUsers is list
+          && request.resource.data.mutedUsers.size() <= 200
+          && request.resource.data.kickedUsers.size() <= 200;
+      }
+
       allow read: if signedIn();
       allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'name', 'createdBy', 'createdAt', 'messages',
+          'participants', 'mutedUsers', 'kickedUsers'
+        ])
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 1
         && request.resource.data.name.size() <= 40
-        && request.resource.data.messages == [];
+        && request.resource.data.messages == []
+        && request.resource.data.participants == {}
+        && request.resource.data.mutedUsers == []
+        && request.resource.data.kickedUsers == [];
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages'])
-        && request.resource.data.messages is list
-        && request.resource.data.messages.size() >= 1
-        && request.resource.data.messages.size() <= 100
-        && request.resource.data.messages[request.resource.data.messages.size() - 1].keys()
-          .hasOnly(['id', 'uid', 'nickname', 'type', 'text', 'emojiId', 'createdAt'])
-        && request.resource.data.messages[request.resource.data.messages.size() - 1].uid == request.auth.uid
-        && request.resource.data.messages[request.resource.data.messages.size() - 1].nickname is string
-        && request.resource.data.messages[request.resource.data.messages.size() - 1].nickname.size() >= 1
-        && request.resource.data.messages[request.resource.data.messages.size() - 1].nickname.size() <= 20
-        && (
-          (
-            request.resource.data.messages[request.resource.data.messages.size() - 1].type == 'text'
-            && request.resource.data.messages[request.resource.data.messages.size() - 1].text is string
-            && request.resource.data.messages[request.resource.data.messages.size() - 1].text.size() >= 1
-            && request.resource.data.messages[request.resource.data.messages.size() - 1].text.size() <= 500
-            && request.resource.data.messages[request.resource.data.messages.size() - 1].emojiId == null
-          )
-          ||
-          (
-            request.resource.data.messages[request.resource.data.messages.size() - 1].type == 'emoji'
-            && request.resource.data.messages[request.resource.data.messages.size() - 1].text == ''
-            && request.resource.data.messages[request.resource.data.messages.size() - 1].emojiId is int
-            && request.resource.data.messages[request.resource.data.messages.size() - 1].emojiId >= 1
-            && request.resource.data.messages[request.resource.data.messages.size() - 1].emojiId <= 111
-          )
-        );
+        && (validMessageUpdate() || validPresenceUpdate() || validHostUpdate());
       allow delete: if false;
     }
   }

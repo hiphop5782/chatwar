@@ -12,6 +12,9 @@ import {
 import { auth, db } from './firebase'
 
 const NICKNAME_KEY = 'chatwar.nickname'
+const PRESENCE_INTERVAL = 60_000
+const ONLINE_THRESHOLD = 150_000
+const MESSAGE_MAX_LENGTH = 500
 const EMOJI_IDS = Array.from({ length: 111 }, (_, index) => index + 1)
 const EMOJI_NAMES = {
   1: '화남', 2: '무표정', 3: '삐짐', 4: '멋짐', 5: '슬픔', 6: '메롱',
@@ -34,13 +37,23 @@ function formatTime(timestamp) {
   }).format(new Date(timestamp))
 }
 
-function renderMessageText(messageText) {
+function isEmojiOnlyMessage(messageText) {
+  let emojiCount = 0
+  const remainingText = messageText.replace(/\[[^\]\n]{1,20}\]/g, (token) => {
+    if (!EMOJI_BY_TOKEN[token]) return token
+    emojiCount += 1
+    return ''
+  })
+  return emojiCount > 0 && remainingText.trim() === ''
+}
+
+function renderMessageText(messageText, largeEmoji = false) {
   return messageText.split(/(\[[^\]\n]{1,20}\])/g).map((part, index) => {
     const emojiId = EMOJI_BY_TOKEN[part]
     if (!emojiId) return part
     return (
       <img
-        className="inline-emoji"
+        className={`inline-emoji ${largeEmoji ? 'standalone' : ''}`}
         src={`/emojis/${emojiId}.png`}
         alt={part}
         title={part}
@@ -84,6 +97,9 @@ function CreateRoom({ user }) {
         createdBy: user.uid,
         createdAt: serverTimestamp(),
         messages: [],
+        participants: {},
+        mutedUsers: [],
+        kickedUsers: [],
       })
       window.location.assign(`/?room=${encodeURIComponent(room.id)}`)
     } catch {
@@ -129,6 +145,10 @@ function ChatRoom({ roomId, user }) {
   const [sending, setSending] = useState(false)
   const [copied, setCopied] = useState(false)
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
+  const [participantPanelOpen, setParticipantPanelOpen] = useState(false)
+  const [systemText, setSystemText] = useState('')
+  const [presenceNow, setPresenceNow] = useState(0)
+  const [joinError, setJoinError] = useState('')
   const bottomRef = useRef(null)
   const messageInputRef = useRef(null)
 
@@ -146,25 +166,75 @@ function ChatRoom({ roomId, user }) {
     if (roomState !== 'ready' || !joined) return undefined
     return onSnapshot(doc(db, 'rooms', roomId), (snapshot) => {
       if (!snapshot.exists()) return
-      setMessages(snapshot.data().messages ?? [])
+      const nextRoom = { id: snapshot.id, ...snapshot.data() }
+      setRoom(nextRoom)
+      setMessages(nextRoom.messages ?? [])
     })
   }, [joined, roomId, roomState])
+
+  useEffect(() => {
+    if (!joined || roomState !== 'ready') return undefined
+
+    const updatePresence = async () => {
+      const roomReference = doc(db, 'rooms', roomId)
+      await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(roomReference)
+        if (!snapshot.exists()) return
+        const data = snapshot.data()
+        if ((data.kickedUsers ?? []).includes(user.uid)) return
+        transaction.update(roomReference, {
+          participants: {
+            ...(data.participants ?? {}),
+            [user.uid]: { uid: user.uid, nickname, lastSeen: Date.now() },
+          },
+        })
+      }).catch(() => {})
+      setPresenceNow(Date.now())
+    }
+
+    updatePresence()
+    const heartbeat = window.setInterval(updatePresence, PRESENCE_INTERVAL)
+    const clock = window.setInterval(() => setPresenceNow(Date.now()), 30_000)
+    return () => {
+      window.clearInterval(heartbeat)
+      window.clearInterval(clock)
+    }
+  }, [joined, nickname, roomId, roomState, user.uid])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  function enterRoom(event) {
+  async function enterRoom(event) {
     event.preventDefault()
     const nextNickname = nickname.trim()
     if (!nextNickname) return
-    localStorage.setItem(NICKNAME_KEY, nextNickname)
-    setNickname(nextNickname)
-    setJoined(true)
+    setJoinError('')
+
+    try {
+      const roomReference = doc(db, 'rooms', roomId)
+      await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(roomReference)
+        if (!snapshot.exists()) throw new Error('Room not found')
+        const data = snapshot.data()
+        if ((data.kickedUsers ?? []).includes(user.uid)) throw new Error('Kicked')
+        transaction.update(roomReference, {
+          participants: {
+            ...(data.participants ?? {}),
+            [user.uid]: { uid: user.uid, nickname: nextNickname, lastSeen: Date.now() },
+          },
+        })
+      })
+      localStorage.setItem(NICKNAME_KEY, nextNickname)
+      setNickname(nextNickname)
+      setJoined(true)
+    } catch (error) {
+      setJoinError(error.message === 'Kicked' ? '이 방에서 강퇴되었습니다.' : '방에 입장하지 못했습니다.')
+    }
   }
 
   async function appendMessage({ type, messageText = '', emojiId = null }) {
-    if (sending) return false
+    if (sending || (room?.mutedUsers ?? []).includes(user.uid)) return false
     setSending(true)
     try {
       const roomReference = doc(db, 'rooms', roomId)
@@ -202,6 +272,9 @@ function ChatRoom({ roomId, user }) {
     setText('')
     const sent = await appendMessage({ type: 'text', messageText: nextText })
     if (!sent) setText(nextText)
+    requestAnimationFrame(() => {
+      if (messageInputRef.current) messageInputRef.current.style.height = 'auto'
+    })
   }
 
   function insertEmojiToken(emojiId) {
@@ -210,14 +283,72 @@ function ChatRoom({ roomId, user }) {
     const start = input?.selectionStart ?? text.length
     const end = input?.selectionEnd ?? start
     const nextText = `${text.slice(0, start)}${token}${text.slice(end)}`
-    setText(nextText.slice(0, 500))
+    setText(nextText.slice(0, MESSAGE_MAX_LENGTH))
     setEmojiPickerOpen(false)
 
     requestAnimationFrame(() => {
-      const cursor = Math.min(start + token.length, 500)
-      messageInputRef.current?.focus()
-      messageInputRef.current?.setSelectionRange(cursor, cursor)
+      const cursor = Math.min(start + token.length, MESSAGE_MAX_LENGTH)
+      const input = messageInputRef.current
+      input?.focus()
+      input?.setSelectionRange(cursor, cursor)
+      if (input) {
+        input.style.height = 'auto'
+        input.style.height = `${Math.min(input.scrollHeight, 120)}px`
+      }
     })
+  }
+
+  function handleMessageKeyDown(event) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    if (!isMuted && text.trim() && !sending) event.currentTarget.form?.requestSubmit()
+  }
+
+  function resizeMessageInput(event) {
+    event.currentTarget.style.height = 'auto'
+    event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 120)}px`
+  }
+
+  async function moderateParticipant(targetUid, action) {
+    if (room?.createdBy !== user.uid || targetUid === user.uid) return
+    const roomReference = doc(db, 'rooms', roomId)
+    await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(roomReference)
+      if (!snapshot.exists()) return
+      const data = snapshot.data()
+      if (data.createdBy !== user.uid) return
+      const mutedUsers = data.mutedUsers ?? []
+
+      if (action === 'mute') {
+        transaction.update(roomReference, {
+          participants: data.participants ?? {},
+          mutedUsers: mutedUsers.includes(targetUid)
+            ? mutedUsers.filter((uid) => uid !== targetUid)
+            : [...mutedUsers, targetUid],
+          kickedUsers: data.kickedUsers ?? [],
+        })
+        return
+      }
+
+      if (action === 'kick') {
+        const participants = { ...(data.participants ?? {}) }
+        delete participants[targetUid]
+        transaction.update(roomReference, {
+          participants,
+          mutedUsers: mutedUsers.filter((uid) => uid !== targetUid),
+          kickedUsers: [...new Set([...(data.kickedUsers ?? []), targetUid])],
+        })
+      }
+    })
+  }
+
+  async function sendSystemMessage(event) {
+    event.preventDefault()
+    const nextText = systemText.trim()
+    if (!nextText || room?.createdBy !== user.uid) return
+    setSystemText('')
+    const sent = await appendMessage({ type: 'system', messageText: nextText })
+    if (!sent) setSystemText(nextText)
   }
 
   async function copyLink() {
@@ -241,9 +372,21 @@ function ChatRoom({ roomId, user }) {
             <input maxLength="20" placeholder="닉네임" value={nickname} onChange={(event) => setNickname(event.target.value)} autoFocus />
             <button disabled={!nickname.trim()}>입장하기</button>
           </form>
+          {joinError && <p className="error-text">{joinError}</p>}
         </section>
       </main>
     )
+  }
+
+  const participants = Object.values(room.participants ?? {})
+    .filter((participant) => presenceNow - participant.lastSeen <= ONLINE_THRESHOLD)
+    .sort((left, right) => Number(right.uid === room.createdBy) - Number(left.uid === room.createdBy))
+  const isHost = room.createdBy === user.uid
+  const isMuted = (room.mutedUsers ?? []).includes(user.uid)
+  const isKicked = (room.kickedUsers ?? []).includes(user.uid)
+
+  if (isKicked) {
+    return <StatusPage title="강퇴되었습니다" description="방장이 이 채팅방에서 내보냈습니다." action />
   }
 
   return (
@@ -254,13 +397,60 @@ function ChatRoom({ roomId, user }) {
             <span className="brand-small">Chatwar</span>
             <h1>{room.name}</h1>
           </div>
-          <button className="copy-button" onClick={copyLink}>{copied ? '복사됨' : '초대 링크'}</button>
+          <div className="header-actions">
+            <button className="participants-button" onClick={() => setParticipantPanelOpen((open) => !open)}>
+              접속자 {participants.length}
+            </button>
+            <button className="copy-button" onClick={copyLink}>{copied ? '복사됨' : '초대 링크'}</button>
+          </div>
         </header>
+        {participantPanelOpen && (
+          <aside className="participant-panel">
+            <div className="participant-panel-header">
+              <strong>접속자 {participants.length}</strong>
+              <button onClick={() => setParticipantPanelOpen(false)} aria-label="접속자 목록 닫기">×</button>
+            </div>
+            <div className="participant-list">
+              {participants.map((participant) => {
+                const participantIsHost = participant.uid === room.createdBy
+                const participantIsMuted = (room.mutedUsers ?? []).includes(participant.uid)
+                return (
+                  <div className="participant-row" key={participant.uid}>
+                    <div className="participant-name">
+                      <span className="online-dot" />
+                      <span>{participant.nickname}</span>
+                      {participantIsHost && <em>방장</em>}
+                      {participantIsMuted && <em className="muted-label">채팅 금지</em>}
+                    </div>
+                    {isHost && !participantIsHost && (
+                      <div className="participant-controls">
+                        <button onClick={() => moderateParticipant(participant.uid, 'mute')}>
+                          {participantIsMuted ? '금지 해제' : '채팅 금지'}
+                        </button>
+                        <button className="kick-button" onClick={() => moderateParticipant(participant.uid, 'kick')}>강퇴</button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {isHost && (
+              <form className="system-message-form" onSubmit={sendSystemMessage}>
+                <input maxLength="500" value={systemText} onChange={(event) => setSystemText(event.target.value)} placeholder="시스템 메시지" />
+                <button disabled={!systemText.trim() || sending}>보내기</button>
+              </form>
+            )}
+          </aside>
+        )}
         <div className="retention-note">최근 메시지 100개가 보관됩니다</div>
         <div className="message-list" aria-live="polite">
           {messages.length === 0 && <div className="empty-chat">첫 메시지를 남겨보세요.</div>}
           {messages.map((message) => {
+            if (message.type === 'system') {
+              return <div className="system-message" key={message.id}>{message.text}</div>
+            }
             const mine = message.uid === user.uid
+            const emojiOnly = message.type !== 'emoji' && isEmojiOnlyMessage(message.text)
             return (
               <article className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>
                 {!mine && <span className="message-name">{message.nickname}</span>}
@@ -270,7 +460,9 @@ function ChatRoom({ roomId, user }) {
                       <img src={`/emojis/${message.emojiId}.png`} alt={`게임 이모티콘 ${message.emojiId}`} />
                     </div>
                   ) : (
-                    <p className="message-bubble">{renderMessageText(message.text)}</p>
+                    <p className={`message-bubble ${emojiOnly ? 'emoji-only' : ''}`}>
+                      {renderMessageText(message.text, emojiOnly)}
+                    </p>
                   )}
                   <time>{formatTime(message.createdAt)}</time>
                 </div>
@@ -307,18 +499,26 @@ function ChatRoom({ roomId, user }) {
               aria-label="게임 이모티콘 열기"
               aria-expanded={emojiPickerOpen}
               onClick={() => setEmojiPickerOpen((open) => !open)}
+              disabled={isMuted}
             >
               ☺
             </button>
-            <input
-              ref={messageInputRef}
-              maxLength="500"
-              placeholder="메시지 또는 [하하]"
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              aria-label="메시지"
-            />
-            <button className="send-button" disabled={!text.trim() || sending} aria-label="전송">전송</button>
+            <div className="message-input-wrap">
+              <textarea
+                ref={messageInputRef}
+                rows="1"
+                maxLength={MESSAGE_MAX_LENGTH}
+                placeholder={isMuted ? '방장이 채팅을 금지했습니다' : '메시지 또는 [하하]'}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                onInput={resizeMessageInput}
+                onKeyDown={handleMessageKeyDown}
+                aria-label="메시지"
+                disabled={isMuted}
+              />
+              <span className="character-counter">{text.length}/{MESSAGE_MAX_LENGTH}</span>
+            </div>
+            <button className="send-button" disabled={isMuted || !text.trim() || sending} aria-label="전송">전송</button>
           </form>
         </div>
       </section>
