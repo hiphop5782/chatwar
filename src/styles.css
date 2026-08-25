@@ -1,0 +1,107 @@
+@import url('https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Manrope:wght@500;600;700;800&display=swap');
+
+:root {
+  font-family: Manrope, 'Gowun Dodum', sans-serif;
+  color: #172033;
+  background: #eef1f7;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .5; }
+
+.landing-shell,
+.chat-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(107, 92, 255, .18), transparent 32%),
+    radial-gradient(circle at 90% 85%, rgba(16, 185, 129, .12), transparent 28%),
+    #eef1f7;
+}
+
+.hero-card, .join-card, .status-card {
+  width: min(100%, 620px);
+  padding: clamp(32px, 7vw, 64px);
+  border: 1px solid rgba(255,255,255,.8);
+  border-radius: 30px;
+  background: rgba(255,255,255,.84);
+  box-shadow: 0 24px 70px rgba(33, 42, 66, .14);
+  backdrop-filter: blur(18px);
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 17px;
+  color: white;
+  background: #6b5cff;
+  font-weight: 800;
+  letter-spacing: -.04em;
+  box-shadow: 0 10px 24px rgba(107, 92, 255, .3);
+}
+
+.eyebrow { margin: 28px 0 6px; color: #6b5cff; font-size: 13px; font-weight: 800; letter-spacing: .08em; }
+h1 { margin: 0; color: #111827; font-size: clamp(32px, 7vw, 54px); line-height: 1.05; letter-spacing: -.05em; }
+.hero-copy { max-width: 470px; margin: 20px 0 36px; color: #697386; line-height: 1.7; }
+.create-form label { display: block; margin-bottom: 10px; font-size: 14px; font-weight: 800; }
+.input-action { display: flex; gap: 10px; }
+input { min-width: 0; border: 1px solid #d9deea; border-radius: 14px; outline: none; background: white; transition: border-color .2s, box-shadow .2s; }
+input:focus { border-color: #6b5cff; box-shadow: 0 0 0 4px rgba(107,92,255,.12); }
+.input-action input { flex: 1; padding: 15px 17px; }
+button, .status-card a { border: 0; border-radius: 14px; padding: 0 20px; color: white; background: #6b5cff; font-weight: 800; text-decoration: none; }
+.error-text { margin-bottom: 0; color: #dc2626; font-size: 14px; }
+
+.join-card p:not(.eyebrow), .status-card p { color: #697386; }
+.join-form { display: flex; gap: 10px; margin-top: 28px; }
+.join-form input { flex: 1; padding: 15px 17px; }
+.status-card { text-align: center; }
+.status-card .brand-mark { margin: 0 auto 28px; }
+.status-card h1 { font-size: clamp(26px, 6vw, 42px); }
+.status-card a { display: inline-block; margin-top: 20px; padding: 13px 20px; }
+
+.chat-shell { padding: 0; }
+.chat-card { width: min(100%, 860px); height: min(100vh, 920px); display: grid; grid-template-rows: auto auto 1fr auto; overflow: hidden; background: #fff; box-shadow: 0 24px 70px rgba(33,42,66,.16); }
+.chat-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 26px 18px; border-bottom: 1px solid #eef0f5; }
+.brand-small { color: #6b5cff; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+.chat-header h1 { margin-top: 4px; font-size: 23px; letter-spacing: -.03em; }
+.copy-button { flex: 0 0 auto; height: 40px; padding: 0 15px; color: #5548db; background: #efedff; font-size: 13px; }
+.retention-note { padding: 7px 20px; color: #8a93a5; background: #fafbfc; text-align: center; font-size: 11px; }
+.message-list { overflow-y: auto; padding: 26px; background: #f7f8fb; }
+.empty-chat { display: grid; height: 100%; place-items: center; color: #a0a7b5; font-size: 14px; }
+.message-row { max-width: 72%; margin-bottom: 17px; }
+.message-row.mine { margin-left: auto; }
+.message-name { display: block; margin: 0 0 6px 4px; color: #596276; font-size: 12px; font-weight: 700; }
+.message-line { display: flex; align-items: flex-end; gap: 7px; }
+.mine .message-line { flex-direction: row-reverse; }
+.message-bubble { margin: 0; padding: 11px 14px; border-radius: 6px 17px 17px 17px; background: #fff; box-shadow: 0 3px 12px rgba(37,45,66,.07); line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
+.mine .message-bubble { color: #fff; border-radius: 17px 6px 17px 17px; background: #6b5cff; }
+.message-line time { flex: 0 0 auto; color: #9aa1ae; font-size: 10px; }
+.composer { display: flex; gap: 10px; padding: 16px 20px max(16px, env(safe-area-inset-bottom)); border-top: 1px solid #e8ebf1; background: #fff; }
+.composer input { flex: 1; padding: 13px 16px; background: #f7f8fb; }
+.composer button { min-width: 70px; }
+
+@media (min-width: 861px) and (min-height: 700px) {
+  .chat-shell { padding: 24px; }
+  .chat-card { border-radius: 26px; }
+}
+
+@media (max-width: 560px) {
+  .landing-shell { padding: 14px; }
+  .hero-card, .join-card, .status-card { padding: 32px 24px; border-radius: 24px; }
+  .input-action, .join-form { flex-direction: column; }
+  .input-action button, .join-form button { min-height: 50px; }
+  .chat-header { padding: 18px 16px 14px; }
+  .chat-header h1 { max-width: 220px; overflow: hidden; font-size: 19px; text-overflow: ellipsis; white-space: nowrap; }
+  .message-list { padding: 20px 14px; }
+  .message-row { max-width: 86%; }
+  .composer { padding-left: 12px; padding-right: 12px; }
+}
