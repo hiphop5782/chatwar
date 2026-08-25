@@ -17,11 +17,14 @@ service cloud.firestore {
           && request.resource.data.messages is list
           && request.resource.data.messages.size() >= 1
           && request.resource.data.messages.size() <= 100
-          && lastMessage().keys().hasOnly(['id', 'uid', 'nickname', 'type', 'text', 'emojiId', 'createdAt'])
+          && lastMessage().keys().hasOnly(['id', 'uid', 'nickname', 'type', 'text', 'emojiId', 'sourceLanguage', 'createdAt'])
           && lastMessage().uid == request.auth.uid
           && lastMessage().nickname is string
           && lastMessage().nickname.size() >= 1
           && lastMessage().nickname.size() <= 20
+          && lastMessage().sourceLanguage is string
+          && lastMessage().sourceLanguage.size() >= 2
+          && lastMessage().sourceLanguage.size() <= 5
           && (
             (
               lastMessage().type == 'text'

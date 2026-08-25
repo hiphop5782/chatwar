@@ -10,6 +10,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore'
 import { auth, db } from './firebase'
+import { getInitialLanguage, LANGUAGE_OPTIONS, normalizeLanguage, translateMessage } from './translation'
 
 const NICKNAME_KEY = 'chatwar.nickname'
 const PRESENCE_INTERVAL = 60_000
@@ -61,6 +62,35 @@ function renderMessageText(messageText, largeEmoji = false) {
       />
     )
   })
+}
+
+function TranslatedText({ message, targetLanguage }) {
+  const sourceLanguage = normalizeLanguage(message.sourceLanguage || 'ko')
+  const needsTranslation = sourceLanguage !== targetLanguage
+  const [translatedText, setTranslatedText] = useState(message.text)
+  const [showOriginal, setShowOriginal] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    if (!needsTranslation) return () => { active = false }
+    translateMessage(message.text, sourceLanguage, targetLanguage)
+      .then((translated) => { if (active) setTranslatedText(translated) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [message.text, needsTranslation, sourceLanguage, targetLanguage])
+
+  const visibleText = showOriginal ? message.text : translatedText
+  const emojiOnly = isEmojiOnlyMessage(visibleText)
+  return (
+    <div className="translated-content">
+      <span className={emojiOnly ? 'emoji-only-content' : ''}>{renderMessageText(visibleText, emojiOnly)}</span>
+      {needsTranslation && translatedText !== message.text && (
+        <button className="translation-toggle" onClick={() => setShowOriginal((show) => !show)}>
+          {showOriginal ? '번역 보기' : '원문 보기'}
+        </button>
+      )}
+    </div>
+  )
 }
 
 export default function App() {
@@ -149,6 +179,7 @@ function ChatRoom({ roomId, user }) {
   const [systemText, setSystemText] = useState('')
   const [presenceNow, setPresenceNow] = useState(0)
   const [joinError, setJoinError] = useState('')
+  const [displayLanguage, setDisplayLanguage] = useState(getInitialLanguage)
   const bottomRef = useRef(null)
   const messageInputRef = useRef(null)
 
@@ -250,6 +281,7 @@ function ChatRoom({ roomId, user }) {
           type,
           text: messageText,
           emojiId,
+          sourceLanguage: displayLanguage,
           createdAt: Date.now(),
         }
 
@@ -378,6 +410,12 @@ function ChatRoom({ roomId, user }) {
     )
   }
 
+  function changeDisplayLanguage(event) {
+    const language = event.target.value
+    localStorage.setItem('chatwar.language', language)
+    setDisplayLanguage(language)
+  }
+
   const participants = Object.values(room.participants ?? {})
     .filter((participant) => presenceNow - participant.lastSeen <= ONLINE_THRESHOLD)
     .sort((left, right) => Number(right.uid === room.createdBy) - Number(left.uid === room.createdBy))
@@ -398,6 +436,11 @@ function ChatRoom({ roomId, user }) {
             <h1>{room.name}</h1>
           </div>
           <div className="header-actions">
+            <select className="language-select" value={displayLanguage} onChange={changeDisplayLanguage} aria-label="표시 언어">
+              {LANGUAGE_OPTIONS.map((language) => (
+                <option value={language.code} key={language.code}>{language.label}</option>
+              ))}
+            </select>
             <button className="participants-button" onClick={() => setParticipantPanelOpen((open) => !open)}>
               접속자 {participants.length}
             </button>
@@ -447,10 +490,9 @@ function ChatRoom({ roomId, user }) {
           {messages.length === 0 && <div className="empty-chat">첫 메시지를 남겨보세요.</div>}
           {messages.map((message) => {
             if (message.type === 'system') {
-              return <div className="system-message" key={message.id}>{message.text}</div>
+              return <div className="system-message" key={message.id}><TranslatedText key={`${message.id}-${displayLanguage}`} message={message} targetLanguage={displayLanguage} /></div>
             }
             const mine = message.uid === user.uid
-            const emojiOnly = message.type !== 'emoji' && isEmojiOnlyMessage(message.text)
             return (
               <article className={`message-row ${mine ? 'mine' : ''}`} key={message.id}>
                 {!mine && <span className="message-name">{message.nickname}</span>}
@@ -460,9 +502,9 @@ function ChatRoom({ roomId, user }) {
                       <img src={`/emojis/${message.emojiId}.png`} alt={`게임 이모티콘 ${message.emojiId}`} />
                     </div>
                   ) : (
-                    <p className={`message-bubble ${emojiOnly ? 'emoji-only' : ''}`}>
-                      {renderMessageText(message.text, emojiOnly)}
-                    </p>
+                    <div className={`message-bubble ${isEmojiOnlyMessage(message.text) ? 'emoji-only' : ''}`}>
+                      <TranslatedText key={`${message.id}-${displayLanguage}`} message={message} targetLanguage={displayLanguage} />
+                    </div>
                   )}
                   <time>{formatTime(message.createdAt)}</time>
                 </div>
