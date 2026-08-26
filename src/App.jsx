@@ -49,19 +49,30 @@ function isEmojiOnlyMessage(messageText) {
 }
 
 function renderMessageText(messageText, largeEmoji = false) {
-  return messageText.split(/(\[[^\]\n]{1,20}\])/g).map((part, index) => {
+  const content = []
+
+  messageText.split(/(\[[^\]\n]{1,20}\])/g).forEach((part, index) => {
     const emojiId = EMOJI_BY_TOKEN[part]
-    if (!emojiId) return part
-    return (
-      <img
-        className={`inline-emoji ${largeEmoji ? 'standalone' : ''}`}
-        src={`/emojis/${emojiId}.png`}
-        alt={part}
-        title={part}
-        key={`${part}-${index}`}
-      />
-    )
+    if (emojiId) {
+      content.push(
+        <img
+          className={`inline-emoji ${largeEmoji ? 'standalone' : ''}`}
+          src={`/emojis/${emojiId}.png`}
+          alt={part}
+          title={part}
+          key={`emoji-${index}`}
+        />,
+      )
+      return
+    }
+
+    part.split('\n').forEach((line, lineIndex) => {
+      if (lineIndex > 0) content.push(<br key={`break-${index}-${lineIndex}`} />)
+      if (line) content.push(line)
+    })
   })
+
+  return content
 }
 
 function TranslatedText({ message, targetLanguage }) {

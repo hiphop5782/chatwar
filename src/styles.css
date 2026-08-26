@@ -107,7 +107,8 @@ button, .status-card a { border: 0; border-radius: 14px; padding: 0 20px; color:
 .inline-emoji { display: inline-block; width: 30px; height: 30px; margin: 0 2px; object-fit: contain; vertical-align: middle; }
 .inline-emoji.standalone { width: clamp(96px, 20vw, 150px); height: clamp(96px, 20vw, 150px); margin: 0; }
 .message-bubble.emoji-only, .mine .message-bubble.emoji-only { padding: 0; color: inherit; background: transparent; box-shadow: none; }
-.translated-content { display: grid; gap: 5px; }
+.translated-content { display: grid; min-width: 0; gap: 5px; }
+.translated-content > span { min-width: 0; white-space: break-spaces; overflow-wrap: anywhere; word-break: break-word; }
 .translated-content .emoji-only-content { display: flex; gap: 5px; }
 .translation-toggle { justify-self: start; padding: 0; color: #7a8395; background: transparent; font-size: 9px; font-weight: 700; text-decoration: underline; }
 .mine .translation-toggle { color: rgba(255,255,255,.74); }
@@ -117,9 +118,11 @@ button, .status-card a { border: 0; border-radius: 14px; padding: 0 20px; color:
 .message-line time { flex: 0 0 auto; color: #9aa1ae; font-size: 10px; }
 .composer-wrap { position: relative; background: #fff; }
 .composer { display: flex; align-items: flex-end; gap: 10px; padding: 16px 20px max(16px, env(safe-area-inset-bottom)); border-top: 1px solid #e8ebf1; background: #fff; }
-.message-input-wrap { position: relative; display: flex; flex: 1; min-width: 0; }
-.composer textarea { width: 100%; min-height: 48px; max-height: 120px; padding: 12px 52px 12px 16px; resize: none; overflow-y: auto; background: #f7f8fb; line-height: 1.45; }
-.character-counter { position: absolute; right: 11px; bottom: 7px; color: #9aa1ae; font-size: 9px; pointer-events: none; }
+.message-input-wrap { position: relative; display: flex; flex: 1; min-width: 0; overflow: hidden; border: 1px solid #d9deea; border-radius: 18px; background: #f7f8fb; transition: border-color .2s, box-shadow .2s; }
+.message-input-wrap:focus-within { border-color: #6b5cff; box-shadow: 0 0 0 4px rgba(107,92,255,.12); }
+.composer textarea { width: 100%; min-height: 48px; max-height: 120px; padding: 12px 52px 18px 16px; border: 0; border-radius: 0; resize: none; overflow-y: auto; background: transparent; box-shadow: none; line-height: 1.45; scrollbar-width: thin; }
+.composer textarea:focus { border-color: transparent; box-shadow: none; }
+.character-counter { position: absolute; right: 12px; bottom: 7px; color: #9aa1ae; font-size: 9px; line-height: 1; pointer-events: none; }
 .composer .send-button { min-width: 70px; height: 48px; }
 .composer .emoji-toggle { flex: 0 0 46px; width: 46px; height: 48px; padding: 0; color: #6b5cff; background: #efedff; font-size: 25px; }
 .composer .emoji-toggle.active { color: #fff; background: #6b5cff; }
